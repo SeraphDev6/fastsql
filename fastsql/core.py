@@ -37,7 +37,13 @@ class DBTable:
     "A connection to a SQLAlchemy table, created if needed"
 
     def __init__(self, table: sa.Table, database: Database, cls):
-        self.table, self.db, self.cls, self.xtra_id = table, database, cls, {}
+        self.table, self.db, self.cls, self.xtra_id, self.or_xtra = (
+            table,
+            database,
+            cls,
+            {},
+            {},
+        )
         table.create(self.db.engine, checkfirst=True)
 
     def __repr__(self) -> str:
@@ -60,6 +66,9 @@ class DBTable:
     def xtra(self, **kwargs):
         "Set `xtra_id`"
         self.xtra_id = kwargs
+
+    def or_xtra(self, kwargs):
+        self.or_xtra = kwargs
 
 
 # %% ../00_core.ipynb 9
@@ -141,9 +150,16 @@ def __call__(
     if where_args:
         kw = {**kw, **where_args}
     xtra = self.xtra_id
+    or_xtra = self.or_xtra
     if xtra:
         xw = " and ".join(f'"{k}" = {v!r}' for k, v in xtra.items())
-        where = f"{xw} and {where}" if where else xw
+        if or_xtra:
+            exw = " and ".join(f'"{k}" = {v!r}' for k, v in xtra.items())
+            where = (
+                f"(({xw}) OR ({exw})) AND {where}" if where else f"({xw}) OR ({exw})"
+            )
+        else:
+            where = f"{xw} and {where}" if where else xw
     if where:
         where = sa.text(where)
         if kw:
